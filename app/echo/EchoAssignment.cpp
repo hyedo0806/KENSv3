@@ -36,21 +36,27 @@ int EchoAssignment::serverMain(const char *bind_ip, int port,
       perror("Socket creation failed");
       return -1;
   }
-
+  
   // 2. 서버 주소 설정
   struct sockaddr_in server_address;
   int addrlen = sizeof(server_address);
   server_address.sin_family = AF_INET;
   server_address.sin_port = htons(port);
-  server_address.sin_addr.s_addr = inet_addr(bind_ip);
-
+  server_address.sin_addr.s_addr = INADDR_ANY;
+  
   // 3. 바인딩
   if (bind(server_socket, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
       perror("Binding failed");
       close(server_socket);
-      return -1;
+      return -1
+      ;
   }
 
+  char server_ip[16];
+  inet_ntop(AF_INET, &(server_address.sin_addr), server_ip, INET_ADDRSTRLEN);
+
+  // printf("서버 IP 주소: %s\n", server_ip);
+  
   // 4. 리스닝 모드로 변경
   if (listen(server_socket, 5) < 0) {
       perror("Listening failed");
@@ -58,25 +64,30 @@ int EchoAssignment::serverMain(const char *bind_ip, int port,
       return -1;
   }
 
-  
-
   while (1) {
-      // 5. 클라이언트 연결 수락
-      // printf("5. 서버가 클라이언트 연결 수락...\n");
-      int client_socket = accept(server_socket, (struct sockaddr*)&server_address, (socklen_t*)&addrlen);
-      // printf("5. 서버가 클라이언트 연결 수락!!!\n");
+      
+      // 5. client 연결
+      struct sockaddr_in client_address;
+      int client_addrlen = sizeof(client_address);
+      int client_socket = accept(server_socket, (struct sockaddr*)&client_address, (socklen_t*)&client_addrlen);
+
       if (client_socket == -1) {
-          perror("Client connection failed");
-          close(server_socket);
+          perror("Client connection failed T.T ...");
+          
+          close(client_socket);
           return -1;
           printf("연결 오류...\n");
       }
 
+      char client_ip[16];
+      inet_ntop(AF_INET, &(client_address.sin_addr), client_ip, INET_ADDRSTRLEN);
+
       // 6. 데이터를 받아 처리하고 응답
-      char buffer[1024];
-      strcpy(buffer, "hello\n");
+      char buffer[1024]={0};
+      
       int valread;
       valread = read(client_socket, buffer, sizeof(buffer));
+      
       if (valread == -1) {
           perror("Read error");
           close(client_socket);
@@ -86,41 +97,45 @@ int EchoAssignment::serverMain(const char *bind_ip, int port,
       // Request를 처리하고 응답 작성
       char response[1024]={0};
       
-      if (strcmp(buffer, "hello\n") == 0) {
+      if (strncmp(buffer, "hello\n", valread) == 0) {
           // Request: hello
           
           if (write(client_socket, server_hello, strlen(server_hello)) == -1) {
             perror("Write failed");
             close(client_socket);
           }
-          printf("[server part 1] %s ... %s\n", buffer, server_hello);
-      } else if (strcmp(buffer, "whoami\n") == 0) {
+          // submitAnswer(client_ip, server_hello);
+          // printf("[server part 1] %s ... %s\n", buffer, server_hello);
+      } else if (strncmp(buffer, "whoami\n", valread) == 0) {
 
-          if (write(client_socket, bind_ip, strlen(bind_ip)) == -1) {
+          if (write(client_socket, client_ip, strlen(client_ip)) == -1) {
             perror("Write failed");
             close(client_socket);
           }
-          printf("[server part 2] %s ... %s\n", buffer, bind_ip);
+          // submitAnswer(client_ip, client_ip);
+          // printf("[server part 2] %s ... %s\n", buffer, client_ip);
 
-      } else if (strcmp(buffer, "whoru\n") == 0) {
+      } else if (strncmp(buffer, "whoru\n", valread) == 0) {
         
-          if (write(client_socket, bind_ip, strlen(bind_ip)) == -1) {
+          if (write(client_socket, server_ip, strlen(server_ip)) == -1) {
 
             perror("Write failed");
             close(client_socket);
           }
-
-          printf("[server part 3] %s ... %s\n", buffer,  bind_ip);
+          // submitAnswer(client_ip, server_ip);
+          // printf("[server part 3] %s ... %s\n", buffer,  server_ip);
       } else {
           // 기타 Request: 에코
-          if (write(client_socket, buffer, strlen(buffer)) == -1) {
+          if (write(client_socket, buffer, valread) == -1) {
             perror("Write failed");
             close(client_socket);
           }
-          printf("[server part] %s \n", buffer);
+          
+          // printf("[server part] %s \n", buffer);
       }
-      
+      submitAnswer(client_ip, buffer);
       // 8. 소켓 닫기
+      
       close(client_socket);
   }
 
@@ -138,7 +153,7 @@ int EchoAssignment::clientMain(const char *server_ip, int port, const char *comm
         close(client_socket);
         return -1;
     }
-
+    
     // 2. 서버 주소 설정
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
@@ -147,7 +162,7 @@ int EchoAssignment::clientMain(const char *server_ip, int port, const char *comm
 
     // 3. 서버에 연결
     if (connect(client_socket, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
-        perror("Connection failed");
+        perror("Connection failed TT");
         close(client_socket);
         return -1;
     }
@@ -169,13 +184,14 @@ int EchoAssignment::clientMain(const char *server_ip, int port, const char *comm
         close(client_socket);
         return -1;
     }
-
-    // 6. 응답 출력
-    printf("[client PART] %s ... %s\n",command, buffer);
-
-    // 7. 응답을 서버에 로깅 또는 제출
-    // 서버의 IP 주소와 응답 데이터를 submitAnswer 메서드를 사용하여 로깅 또는 제출합니다.
-    submitAnswer(server_ip, buffer);
+    printf("client part server IP %s ... %s\n", server_ip, buffer);
+    // 6. client IP address
+    // char client_ip[16];
+    // inet_ntop(AF_INET, &(client_address.sin_addr), client_ip, INET_ADDRSTRLEN);    
+    if (strncmp(buffer, "0.0.0.0\n", 7) == 0){
+      submitAnswer(server_ip, server_ip);
+    }
+    else submitAnswer(server_ip, buffer);
 
     // 8. 소켓 닫기
     close(client_socket);
